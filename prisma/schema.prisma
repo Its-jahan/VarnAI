@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum UsageKind {
+  chat
+  image
+  train
+  eval
+}
+
+enum TrainingStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum EvalScorer {
+  regex
+  contains
+  equals
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String?
+  email     String   @unique
+  avatar    String?
+  createdAt DateTime @default(now())
+  memberships Membership[]
+  messages  Message[]
+  conversations Conversation[] @relation("ConversationUser")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  memberships Membership[]
+  agents    Agent[]
+  datasets  Dataset[]
+  apiKeys   ApiKey[]
+  trainingJobs TrainingJob[]
+  imageJobs ImageJob[]
+  usageEvents UsageEvent[]
+  auditLogs AuditLog[]
+}
+
+model Membership {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  role        Role
+
+  @@unique([userId, workspaceId])
+}
+
+model ApiKey {
+  id           String   @id @default(uuid())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  provider     String
+  encryptedKey String
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+}
+
+model Agent {
+  id           String   @id @default(uuid())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  name         String
+  description  String?
+  defaultModel String
+  temperature  Float    @default(0.7)
+  topP         Float    @default(1)
+  maxTokens    Int      @default(1024)
+  tools        Json     @default("[]")
+  memory       Boolean  @default(false)
+  versions     AgentVersion[]
+  conversations Conversation[]
+}
+
+model AgentVersion {
+  id          String   @id @default(uuid())
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentId     String
+  system      String
+  fewShots    Json
+  safety      Json
+  createdBy   String
+  createdAt   DateTime @default(now())
+  conversations Conversation[]
+  evalRuns    EvalRun[]
+}
+
+model Conversation {
+  id             String   @id @default(uuid())
+  agentVersion   AgentVersion @relation(fields: [agentVersionId], references: [id], onDelete: Cascade)
+  agentVersionId String
+  title          String
+  createdBy      String
+  createdAt      DateTime @default(now())
+  messages       Message[]
+  user           User?    @relation("ConversationUser", fields: [createdBy], references: [id])
+}
+
+model Message {
+  id            String   @id @default(uuid())
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  role          String
+  content       Json
+  tokenUsage    Json?
+  latencyMs     Int?
+  createdAt     DateTime @default(now())
+}
+
+model Dataset {
+  id          String   @id @default(uuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  name        String
+  description String?
+  itemCount   Int       @default(0)
+  items       DatasetItem[]
+  trainingJobs TrainingJob[]
+  evalRuns    EvalRun[]
+}
+
+model DatasetItem {
+  id        String   @id @default(uuid())
+  dataset   Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  datasetId String
+  prompt    String
+  expected  String
+  tags      String[]
+}
+
+model TrainingJob {
+  id                 String   @id @default(uuid())
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId        String
+  dataset            Dataset?  @relation(fields: [datasetId], references: [id])
+  datasetId          String?
+  baseModel          String
+  status             TrainingStatus
+  costEstimateCents  Int?
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model EvalRun {
+  id              String   @id @default(uuid())
+  agentVersion    AgentVersion @relation(fields: [agentVersionId], references: [id], onDelete: Cascade)
+  agentVersionId  String
+  dataset         Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  datasetId       String
+  scorer          EvalScorer
+  passRate        Float
+  avgLatencyMs    Int
+  tokenCostCents  Int
+  createdAt       DateTime @default(now())
+}
+
+model ImageJob {
+  id          String   @id @default(uuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  prompt      String
+  negativePrompt String?
+  size        String
+  n           Int
+  seed        Int?
+  status      String
+  outputs     Json?
+  createdAt   DateTime @default(now())
+}
+
+model UsageEvent {
+  id          String   @id @default(uuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  kind        UsageKind
+  tokensIn    Int?
+  tokensOut   Int?
+  images      Int?
+  costCents   Int?
+  occurredAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  action      String
+  actorId     String?
+  actorName   String?
+  metadata    Json?
+  occurredAt  DateTime @default(now())
+}
