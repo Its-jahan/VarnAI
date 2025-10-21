@@ -1,0 +1,11 @@
+{
+  "root": true,
+  "extends": ["next", "next/core-web-vitals", "plugin:import/recommended", "plugin:@typescript-eslint/recommended", "prettier"],
+  "plugins": ["simple-import-sort"],
+  "rules": {
+    "simple-import-sort/imports": "error",
+    "simple-import-sort/exports": "error",
+    "import/order": "off",
+    "@typescript-eslint/consistent-type-imports": "error"
+  }
+}
